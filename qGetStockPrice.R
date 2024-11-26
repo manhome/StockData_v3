@@ -63,7 +63,7 @@ qMain <- function()
         })
     )
 
-    tmp_file_path <- "C:/App/db/v3"
+    tmp_file_path <- "C:/App/R/StockData_v3"
     tmp_file_db <- c("hk_stock_return.db", "hk_stock_price.db")
     tmp_file_db <- file.path(tmp_file_path, tmp_file_db)
     db_alias <- str_replace(basename(tmp_file_db), pattern="([.]db)$", "")
