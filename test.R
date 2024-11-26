@@ -54,6 +54,8 @@ testDebug <- function()
 
 testDebug_2 <- function()
 {
+    tmp_var_price <- c("open", "high", "low", "close", "adjusted")
+    tmp_var_volume <- c("volume")
 
     tmp_dfPV_chg <- tmp_dfPV %>%
                     select(id_yahoo, Date, open_chg, high_chg, low_chg,
@@ -62,10 +64,12 @@ testDebug_2 <- function()
                         close=close_chg, adjusted=adjusted_chg,
                         volume=volume_chg)
 
-    tmp_dfPV_derived <- tmp_dfP_last %>%
-        inner_join(tmp_dfPV_chg, by="id_yahoo", suffix=c("_last", "")) %>%
+    tmp_dfPV_derived <- tmp_dfPV_chg %>%
+        left_join(tmp_dfP_last, by=c("id_yahoo", "Date"), suffix=c("", "_last")) %>%
+        left_join(tmp_dfV_last, by=c("id_yahoo", "Date"), suffix=c("", "_last")) %>%
         group_by(id_yahoo) %>%
         arrange(desc(Date), .by_group=TRUE) %>%
+        fill(ends_with("_last"), .direction="down") %>%
         mutate(
             across(any_of(tmp_var_price), ~lag_cum_chg(.)),
             across(any_of(tmp_var_volume), ~lag_cum_chg_na(.)),
