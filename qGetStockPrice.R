@@ -52,7 +52,6 @@ get_max_date <- function(dbconn)
 #qMain <- function(chrFileParam, dtStart, dtEnd)
 qMain <- function()
 {
-    file_stock_list <- "HK.xlsx"
 
     dbconn <<- dbConnect(RSQLite::SQLite(), "", flags=SQLITE_RW, extended_types=TRUE)
 
@@ -64,6 +63,7 @@ qMain <- function()
         })
     )
 
+    file_stock_list <- "HK.xlsx"
     tmp_file_path <- "C:/App/R/StockData_v3"
     tmp_file_db <- c("hk_stock_return.db", "hk_stock_price.db")
     tmp_file_db <- file.path(tmp_file_path, tmp_file_db)
@@ -113,7 +113,6 @@ qMain <- function()
         tmp_df <- tq_get(tmp_id_yahoo, from=tmp_start_date, to=tmp_end_date)
 
         tmp_df_all <- bind_rows(tmp_df_all, tmp_df)
-    
     } # for (i
 
     tmp_var_price <- c("open", "high", "low", "close", "adj_close")
@@ -145,7 +144,9 @@ qMain <- function()
                 ungroup()
 
     tmp_dfPV <- tmp_dfP %>%
-                left_join(tmp_dfV, by=c("sec_id", "Date"))
+                left_join(tmp_dfV, by=c("sec_id", "Date")) %>%
+                select(sec_id, Date, ends_with("_chg")) %>%
+                rename_with(~str_replace(.x, "[_]chg", ""), .col=ends_with("_chg"))
 
     tmp_dfP_max_date <- tmp_dfP %>%
                     filter(close > 0) %>%
@@ -167,6 +168,39 @@ qMain <- function()
                     inner_join(tmp_dfV_max_date, by=c("sec_id", "Date")) %>%
                     select(sec_id, Date, any_of(tmp_var_volume))
 
+    tmp_chrTmpTable <- "tmp_db_last_price"
+    tmp_chrKeys <- c("sec_id")
+    tmp_df <- tmp_dfP_last
+    rc <- create_temp_table(dbconn, tmp_df, tmp_chrTmpTable, tmp_chrKeys)
+
+    source_tbl <- tmp_chrTmpTable
+    target_tbl <- "last_price"
+    rc <- table_update(dbconn, target_tbl, source_tbl)
+
+    tmp_chrTmpTable <- "tmp_db_last_volume"
+    tmp_chrKeys <- c("sec_id")
+    tmp_df <- tmp_dfV_last
+    rc <- create_temp_table(dbconn, tmp_df, tmp_chrTmpTable, tmp_chrKeys)
+
+    source_tbl <- tmp_chrTmpTable
+    target_tbl <- "last_volume"
+    rc <- table_update(dbconn, target_tbl, source_tbl)
+
+
+    source_tbl <- tmp_chrTmpTable
+    target_tbl <- "last_price"
+    rc <- table_update(dbconn, target_tbl, source_tbl)
+
+    tmp_chrTmpTable <- "tmp_db_stock_return"
+    tmp_chrKeys <- c("sec_id", "Date")
+    tmp_df <- tmp_dfPV
+    rc <- create_temp_table(dbconn, tmp_df, tmp_chrTmpTable, tmp_chrKeys)
+
+    source_tbl <- tmp_chrTmpTable
+    target_tbl <- "stock_return"
+    rc <- table_update(dbconn, target_tbl, source_tbl)
+
+    dbDisconnect(dbconn)
     #save(list=c("tmp_df_all", "tmp_dfMaxDate"), envir=pos.to.env(1), file="test.RData")
 
 }
