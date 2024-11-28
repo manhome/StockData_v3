@@ -61,9 +61,9 @@ testDebug_2 <- function()
     tmp_dfPV_chg <- tmp_dfPV %>%
                     select(id_yahoo, Date, open_chg, high_chg, low_chg,
                         close_chg, adjusted_chg, volume_chg) %>%
-                    rename(open=open_chg, high=high_chg, low=low_chg,
-                        close=close_chg, adjusted=adjusted_chg,
-                        volume=volume_chg)
+                    rename_with(
+                        ~str_replace(.x, "[_]chg", ""), .col=ends_with("_chg")
+                    )
 
     tmp_dfPV_derived <- tmp_dfPV_chg %>%
         left_join(tmp_dfP_last, by=c("id_yahoo", "Date"), suffix=c("", "_last")) %>%
@@ -72,7 +72,8 @@ testDebug_2 <- function()
         arrange(desc(Date), .by_group=TRUE) %>%
         fill(ends_with("_last"), .direction="down") %>%
         mutate(
-            across(any_of(tmp_var_price), ~lag_cum_chg(.)),
+#            across(any_of(tmp_var_price), ~lag_cum_chg(.)),
+            across(any_of(tmp_var_price), ~lag_cum_chg_na(.)),
             across(any_of(tmp_var_volume), ~lag_cum_chg_na(.)),
             ) %>%
         mutate(
@@ -104,4 +105,21 @@ testDebug_2 <- function()
 
 
 
+}
+
+get_max_date_1 <- function(dbconn)
+{
+    tmp_sql <- "SELECT a1.sec_id, a1.id_yahoo,
+                    (SELECT MAX(a2.Date) FROM stock_return a2
+                        WHERE a2.sec_id = a1.sec_id
+                        AND a2.volume IS NOT NULL) AS [Date]
+                FROM stocks a1"
+
+    tmp_df <- tryCatch(
+                qDBSQLite_SendStatement(dbconn, tmp_sql),
+                error=function(e) {
+                    cat(sprintf("\t%s\n", e))
+                })
+
+    return (tmp_df)
 }

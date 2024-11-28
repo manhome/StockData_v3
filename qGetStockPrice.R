@@ -39,6 +39,7 @@ get_max_date <- function(dbconn)
                         WHERE a2.sec_id = a1.sec_id
                         AND a2.volume IS NOT NULL), '1900-01-01') AS [Date]
                 FROM stocks a1"
+    tmp_sql <- str_replace_all(tmp_sql, "\\s+", " ")
 
     tmp_df <- tryCatch(
                 qDBSQLite_SendStatement(dbconn, tmp_sql),
@@ -46,6 +47,60 @@ get_max_date <- function(dbconn)
                     cat(sprintf("\t%s\n", e))
                 })
 
+    return (tmp_df)
+}
+
+get_stock_last_date <- function(dbconn)
+{
+    tmp_sql <- "SELECT a1.sec_id,
+            	IFNULL((SELECT MAX(a2.Date) FROM stock_return a2
+                    WHERE a2.sec_id = a1.sec_id), '1900-01-01') AS [last_return_date],
+            	IFNULL((SELECT MAX(a2.Date) FROM stock_price a2
+                    WHERE a2.sec_id = a1.sec_id), '1900-01-01') AS [last_price_date],
+            	IFNULL((SELECT a2.close FROM stock_price a2
+            		WHERE a2.sec_id = a1.sec_id
+            		AND a2.Date = (SELECT MAX(a3.Date) FROM stock_price a3
+            			WHERE a3.sec_id = a1.sec_id)), 0) AS [last_close]
+            FROM stocks a1
+            WHERE EXISTS(SELECT 1 FROM last_price a2
+            	WHERE a2.sec_id = a1.sec_id)"
+    tmp_sql <- str_replace_all(tmp_sql, "\\s+", " ")
+
+    tmp_df <- tryCatch(
+                qDBSQLite_SendStatement(dbconn, tmp_sql),
+                error=function(e) {
+                    cat(sprintf("\t%s\n", e))
+                })
+
+    return (tmp_df)
+}
+
+get_stock_return <- function(dbconn, start_date, end_date)
+{
+    if (missing(start_date)) start_date <- "1900-01-01"
+    if (missing(end_date)) end_date <- "9999-01-01"
+
+    tmp_sql <- "SELECT * FROM stock_return
+                WHERE [Date] >= ? AND [Date] <= ?"
+    tmp_sql <- str_replace_all(tmp_sql, "\\s+", " ")
+
+    tmp_params <- as.list(format(c(start_date, end_date)))
+
+    tmp_df <- dbGetQuery(dbconn, tmp_sql, params=tmp_params)
+    return (tmp_df)
+}
+
+get_last_price <- function(dbconn)
+{
+    tmp_sql <- "SELECT * FROM last_price"
+    tmp_df <- dbGetQuery(dbconn, tmp_sql)
+    return (tmp_df)
+}
+
+get_last_volume <- function(dbconn)
+{
+    tmp_sql <- "SELECT * FROM last_volume"
+    tmp_df <- dbGetQuery(dbconn, tmp_sql)
     return (tmp_df)
 }
 
@@ -186,7 +241,6 @@ qMain <- function()
     target_tbl <- "last_volume"
     rc <- table_update(dbconn, target_tbl, source_tbl)
 
-
     source_tbl <- tmp_chrTmpTable
     target_tbl <- "last_price"
     rc <- table_update(dbconn, target_tbl, source_tbl)
@@ -198,6 +252,40 @@ qMain <- function()
 
     source_tbl <- tmp_chrTmpTable
     target_tbl <- "stock_return"
+    rc <- table_update(dbconn, target_tbl, source_tbl)
+
+    tmp_dfPV_chg <- get_stock_return(dbconn)
+    tmp_dfP_last <- get_last_price(dbconn)
+    tmp_dfV_last <- get_last_volume(dbconn)
+
+    tmp_dfPV <- tmp_dfPV_chg %>%
+        left_join(tmp_dfP_last, by=c("sec_id", "Date"), suffix=c("", "_last")) %>%
+        left_join(tmp_dfV_last, by=c("sec_id", "Date"), suffix=c("", "_last")) %>%
+        group_by(sec_id) %>%
+        arrange(desc(Date), .by_group=TRUE) %>%
+        fill(ends_with("_last"), .direction="down") %>%
+        mutate(
+            across(any_of(tmp_var_price), ~lag_cum_chg_na(.)),
+            across(any_of(tmp_var_volume), ~lag_cum_chg_na(.)),
+            ) %>%
+        mutate(
+            open=(open_last*open),
+            high=(high_last*high),
+            low=(low_last*low),
+            close=(close_last*close),
+            volume=(volume_last*volume),
+            adj_close=(adj_close_last*adj_close),
+        ) %>%
+        select(sec_id, Date, any_of(tmp_var_price), any_of(tmp_var_volume)) %>%
+        arrange(sec_id, Date)
+
+    tmp_chrTmpTable <- "tmp_db_stock_price"
+    tmp_chrKeys <- c("sec_id", "Date")
+    tmp_df <- tmp_dfPV
+    rc <- create_temp_table(dbconn, tmp_df, tmp_chrTmpTable, tmp_chrKeys)
+
+    source_tbl <- tmp_chrTmpTable
+    target_tbl <- "stock_price"
     rc <- table_update(dbconn, target_tbl, source_tbl)
 
     dbDisconnect(dbconn)
