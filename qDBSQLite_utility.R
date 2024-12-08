@@ -439,7 +439,7 @@ table_update <- function(dbconn, target_tbl, source_tbl, key_ordinal)
     tmp_sql <- construct_sql_insert(target_tbl, source_tbl)
     tmp_sqls <- c(tmp_sqls, tmp_sql)
 
-    rc <- execute_tran(dbconn, tmp_sqls)
+    rc <- execute_tran(dbconn, tmp_sqls, verbose=TRUE)
     if (rc != 0) {
         cat(sprintf("\t\tFailed in execute_tran. Please check!\n"))
         return (-1)
