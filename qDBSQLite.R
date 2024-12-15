@@ -56,6 +56,13 @@ qDBSQLite_sqlData <- function(dbconn, dfData)
 
     dbms_name <- dbGetInfo(dbconn)$dbms_name
 
+    tmp_is_extendtypes <- tryCatch(
+        dbconn@extend_types,
+        error=function(e) {
+            cat(sprintf("\t%s\n", e))
+            return (FALSE)
+        })
+
     tmp_lst <- dfData
 
     for (j in 1:n) {
@@ -75,8 +82,10 @@ qDBSQLite_sqlData <- function(dbconn, dfData)
                 # embraced with "#" for MS Access Only
                 tmp_lst[[j]] <- format(tmp_lst[[j]], "#%Y-%m-%d %H:%M:%S#")
             } else {
-                # treated as normal string for other DBMS
-                tmp_lst[[j]] <- dbQuoteString(dbconn, format(tmp_lst[[j]], "%Y-%m-%d %H:%M:%OS"))
+                if (!(tmp_is_extendtypes)) {
+                    # treated as normal string for other DBMS
+                    tmp_lst[[j]] <- dbQuoteString(dbconn, format(tmp_lst[[j]], "%Y-%m-%d %H:%M:%OS"))
+                }
             }
         } # if
 
@@ -86,8 +95,10 @@ qDBSQLite_sqlData <- function(dbconn, dfData)
                 # embraced with "#" for MS Access Only
                 tmp_lst[[j]] <- format(tmp_lst[[j]], "#%Y-%m-%d#")
             } else {
-                # treated as normal string for other DBMS
-                tmp_lst[[j]] <- dbQuoteString(dbconn, format(tmp_lst[[j]], "%Y-%m-%d"))
+                if (!(tmp_is_extendtypes)) {
+                    # treated as normal string for other DBMS
+                    tmp_lst[[j]] <- dbQuoteString(dbconn, format(tmp_lst[[j]], "%Y-%m-%d"))
+                }
             }
         } # if
 
